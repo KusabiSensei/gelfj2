@@ -1,5 +1,6 @@
 package org.graylog2.log4j2;
 
+import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.core.Filter;
 import org.apache.logging.log4j.core.Layout;
 import org.apache.logging.log4j.core.LogEvent;
@@ -9,7 +10,7 @@ import org.apache.logging.log4j.core.config.plugins.PluginAttribute;
 import org.apache.logging.log4j.core.config.plugins.PluginElement;
 import org.apache.logging.log4j.core.config.plugins.PluginFactory;
 import org.apache.logging.log4j.core.filter.ThresholdFilter;
-import org.apache.logging.log4j.core.layout.HTMLLayout;
+import org.apache.logging.log4j.core.layout.HtmlLayout;
 import org.graylog2.*;
 import org.json.simple.JSONValue;
 
@@ -219,11 +220,11 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 
 		if (layout == null) {
 			@SuppressWarnings({"unchecked", "UnnecessaryLocalVariable"})
-			Layout<S> l = (Layout<S>) HTMLLayout.createLayout(null, null, null, null, null, null);
+			Layout<S> l = (Layout<S>) HtmlLayout.createLayout(false, null, null, null, null, null);
 			layout = l;
 		}
 		if (filter == null) {
-			filter = ThresholdFilter.createFilter("INFO", null, null);
+			filter = ThresholdFilter.createFilter(Level.INFO, null, null);
 		}
 
 		if (graylogHost == null) {

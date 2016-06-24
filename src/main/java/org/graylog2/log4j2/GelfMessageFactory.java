@@ -26,7 +26,7 @@ public class GelfMessageFactory {
 		String file = null;
 		String lineNumber = null;
 		if (provider.isIncludeLocation()) {
-			file = event.getFQCN();
+			file = event.getLoggerFqcn();
 			lineNumber = String.valueOf(event.getSource().getLineNumber());
 		}
 
@@ -97,7 +97,7 @@ public class GelfMessageFactory {
 	}
 
 	private static int getSyslogEquivalent(Level level) {
-		switch (level) {
+		switch (level.getStandardLevel()) {
 			case OFF:
 				return 0;
 			case FATAL:
