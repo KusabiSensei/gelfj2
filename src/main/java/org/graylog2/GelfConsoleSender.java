@@ -13,15 +13,15 @@ public class GelfConsoleSender implements GelfSender {
         this.target = t;
     }
 
-    public boolean sendMessage(GelfMessage message) {
+    public GelfSenderResult sendMessage(GelfMessage message) {
         try {
-            if (!message.isValid()) return false;
+            if (!message.isValid()) return GelfSenderResult.MESSAGE_NOT_VALID;
             appendToConsole(message.toJson() + "\n");
         } catch (IOException e) {
-            return false;
+            return new GelfSenderResult(GelfSenderResult.ERROR_CODE, e);
         }
 
-        return true;
+        return GelfSenderResult.OK;
     }
 
     public void close() {

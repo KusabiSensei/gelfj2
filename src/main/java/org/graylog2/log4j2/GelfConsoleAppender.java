@@ -172,8 +172,13 @@ public class GelfConsoleAppender<T extends Serializable> extends AbstractAppende
     public void append(LogEvent event) {
         GelfMessage gelfMessage = GelfMessageFactory.makeMessage(event, this);
 
-        if (getGelfSender() == null || !getGelfSender().sendMessage(gelfMessage)) {
-            error("Could not send GELF message");
+        if (getGelfSender() == null) {
+        	error("No sender defined, so could not send the message");
+        }
+        GelfSenderResult result = getGelfSender().sendMessage(gelfMessage); 
+		if (!result.equals(GelfSenderResult.OK))
+        { 
+        	error("Could not send GELF message");
         }
     }
 

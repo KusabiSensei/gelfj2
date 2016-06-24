@@ -17,7 +17,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.SocketException;
+import java.net.URISyntaxException;
 import java.net.UnknownHostException;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -29,7 +32,12 @@ import java.util.Map;
 public class GelfAppender<T extends Serializable> extends AbstractAppender implements GelfMessageProvider {
 
 	private static String originHost;
+	private String graylogHost;
 	private int graylogPort = 12201;
+	private String amqpURI;
+	private String amqpExchangeName;
+	private String amqpRoutingKey;
+	private int amqpMaxRetries = 0;
 	private String facility;
 	private GelfSender gelfSender;
 	private boolean extractStacktrace;
@@ -85,6 +93,22 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 		GelfAppender.originHost = originHost;
 	}
 
+	public String getGraylogHost() {
+		return graylogHost;
+	}
+
+	public void setGraylogHost(String graylogHost) {
+		this.graylogHost = graylogHost;
+	}
+
+	public int getGraylogPort() {
+		return graylogPort;
+	}
+
+	public void setGraylogPort(int graylogPort) {
+		this.graylogPort = graylogPort;
+	}
+
 	public boolean isAddExtendedInformation() {
 		return addExtendedInformation;
 	}
@@ -108,6 +132,38 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 		return Collections.unmodifiableMap(fields);
 	}
 
+	public int getAmqpMaxRetries() {
+		return amqpMaxRetries;
+	}
+
+	public void setAmqpMaxRetries(int amqpMaxRetries) {
+		this.amqpMaxRetries = amqpMaxRetries;
+	}
+
+	public String getAmqpRoutingKey() {
+		return amqpRoutingKey;
+	}
+
+	public void setAmqpRoutingKey(String amqpRoutingKey) {
+		this.amqpRoutingKey = amqpRoutingKey;
+	}
+
+	public String getAmqpExchangeName() {
+		return amqpExchangeName;
+	}
+
+	public void setAmqpExchangeName(String amqpExchangeName) {
+		this.amqpExchangeName = amqpExchangeName;
+	}
+
+	public String getAmqpURI() {
+		return amqpURI;
+	}
+
+	public void setAmqpURI(String amqpURI) {
+		this.amqpURI = amqpURI;
+	}
+
 	/**
 	 * Create a SMTPAppender.
 	 *
@@ -125,6 +181,10 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 	public static <S extends Serializable> GelfAppender<S> createAppender(@PluginAttribute("name") final String name,
 																		  @PluginAttribute("graylogHost") final String graylogHost,
 																		  @PluginAttribute("graylogPort") final String graylogPortStr,
+																		  @PluginAttribute("amqpURI") final String amqpURI,
+																		  @PluginAttribute("amqpExchangeName") final String amqpExchangeName,
+																		  @PluginAttribute("amqpRoutingKey") final String amqpRoutingKey,
+																		  @PluginAttribute("amqpMaxRetries") final String amqpMaxRetriesstr,
 																		  @PluginAttribute("facility") final String facility,
 																		  @PluginAttribute("extractStacktrace") final String extractStacktrace,
 																		  @PluginAttribute("originHost") final String originHost,
@@ -146,6 +206,14 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 		} catch (Exception e) {
 			LOGGER.error("Can't parse graylog server port");
 		}
+		
+		int amqpMaxRetries = 1;
+		try {
+			amqpMaxRetries = Integer.parseInt(amqpMaxRetriesstr);
+		} catch (Exception e) {
+			LOGGER.error("Cannot parse the number of max retries. Using 1.");
+			amqpMaxRetries = 1;
+		}
 
 		final boolean isHandleExceptions = suppressExceptions == null ? true : Boolean.valueOf(suppressExceptions);
 
@@ -163,7 +231,9 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 			return null;
 		} else {
 			try {
-				if (graylogHost.startsWith("tcp:")) {
+				if (amqpURI.startsWith("amqp:")){
+					gelfSender = getGelfAMQPSender(amqpURI, amqpExchangeName, amqpRoutingKey, amqpMaxRetries);
+				} else if (graylogHost.startsWith("tcp:")) {
 					String tcpGraylogHost = graylogHost.substring(4);
 					gelfSender = getGelfTCPSender(tcpGraylogHost, graylogPort);
 				} else if (graylogHost.startsWith("udp:")) {
@@ -191,6 +261,10 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 			gelfAppender.setAddExtendedInformation(Boolean.parseBoolean(addExtendedInformation));
 			gelfAppender.setIncludeLocation(Boolean.parseBoolean(includeLocation));
 			gelfAppender.setAdditionalFields(additionalFields);
+			gelfAppender.setAmqpExchangeName(amqpExchangeName);
+			gelfAppender.setAmqpMaxRetries(amqpMaxRetries);
+			gelfAppender.setAmqpRoutingKey(amqpRoutingKey);
+			gelfAppender.setAmqpURI(amqpURI);
 
 			return gelfAppender;
 		} else {
@@ -205,14 +279,23 @@ public class GelfAppender<T extends Serializable> extends AbstractAppender imple
 	protected static GelfTCPSender getGelfTCPSender(String tcpGraylogHost, int graylogPort) throws IOException {
 		return new GelfTCPSender(tcpGraylogHost, graylogPort);
 	}
+	
+	protected static GelfAMQPSender getGelfAMQPSender(String uri, String exchangeName, String routingKey, int maxRetries) throws KeyManagementException, NoSuchAlgorithmException, URISyntaxException {
+		return new GelfAMQPSender(uri, exchangeName, routingKey, maxRetries);
+	}
 
 	@Override
 	public void append(LogEvent event) {
 		GelfMessage gelfMessage = GelfMessageFactory.makeMessage(event, this);
 
-		if (getGelfSender() == null || !getGelfSender().sendMessage(gelfMessage)) {
-			error("Could not send GELF message");
-		}
+		if (getGelfSender() == null) {
+        	error("No sender defined, so could not send the message");
+        }
+        GelfSenderResult result = getGelfSender().sendMessage(gelfMessage); 
+		if (!result.equals(GelfSenderResult.OK))
+        { 
+        	error("Could not send GELF message");
+        }
 	}
 
 	public GelfSender getGelfSender() {

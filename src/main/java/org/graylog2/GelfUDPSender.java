@@ -32,20 +32,23 @@ public class GelfUDPSender implements GelfSender {
 		return resultingChannel;
 	}
 
-	public boolean sendMessage(GelfMessage message) {
-		return message.isValid() && sendDatagrams(message.toBuffers());
+	public GelfSenderResult sendMessage(GelfMessage message) {
+		if (!message.isValid()) {
+			return GelfSenderResult.MESSAGE_NOT_VALID;
+		}
+		return sendDatagrams(message.toBuffers());
 	}
 
-	private boolean sendDatagrams(ByteBuffer[] bytesList) {
+	private GelfSenderResult sendDatagrams(ByteBuffer[] bytesList) {
 		try {
 			for (ByteBuffer buffer : bytesList) {
 				channel.write(buffer);
 			}
 		} catch (IOException e) {
-			return false;
+			return new GelfSenderResult(GelfSenderResult.ERROR_CODE, e);
 		}
 
-		return true;
+		return GelfSenderResult.OK;
 	}
 
 	public void close() {
